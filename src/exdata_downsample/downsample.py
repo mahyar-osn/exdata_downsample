@@ -1,3 +1,11 @@
+"""
+A simple function to reduce exdata node points. This version only works for exdata with
+one field i.e. rectangular Cartesian coordinates. In future, a more general framework will
+be implemented to handle different number and type of fields as well as different file formats
+e.g. exf/ex2 formats to handle nodal derivatives and element interpolation.
+"""
+
+
 import os
 import argparse
 import re
