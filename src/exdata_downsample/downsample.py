@@ -16,8 +16,8 @@ def downsample(input_ex, output_ex, group_name, factor=2):
         exdata.writelines('   y.  Value index= 1, #Derivatives=0\n')
         exdata.writelines('   z.  Value index= 1, #Derivatives=0\n')
 
-    node_indx = 1
-    new_node_indx = 1
+    node_index = 1
+    new_node_index = 1
     count = 1
     field_count = 1
     coordinate_count = 1
@@ -26,19 +26,19 @@ def downsample(input_ex, output_ex, group_name, factor=2):
     for index, line in enumerate(open(input_ex)):
         with open(output_ex, 'a') as exdata:
 
-            if new_node_indx == 1 or count == factor:
+            if new_node_index == 1 or count == factor:
                 node_skip = False
-                node_pattern = "Node: %s" % node_indx
+                node_pattern = "Node: %s" % node_index
                 node_match = re.match(node_pattern, line)
 
                 if node_match:
                     success = True
-                    exdata.writelines("Node: %s" % new_node_indx + '\n')
+                    exdata.writelines("Node: %s" % new_node_index + '\n')
                     count = 1
                     continue
 
             elif node_skip:
-                node_indx += 1
+                node_index += 1
                 count += 1
                 node_skip = False
                 continue
@@ -61,9 +61,9 @@ def downsample(input_ex, output_ex, group_name, factor=2):
                 if field_count == 4:
                     success = False
                     node_skip = True
-                    node_indx += 1
+                    node_index += 1
                     field_count = 1
-                    new_node_indx += 1
+                    new_node_index += 1
 
 
 def main():
