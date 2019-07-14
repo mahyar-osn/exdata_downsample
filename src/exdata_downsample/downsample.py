@@ -41,14 +41,13 @@ def downsample(input_ex, output_ex, group_name, num_fields, factor=2):
             exdata.writelines('   x.  Value index= 1, #Derivatives=0\n')
             exdata.writelines('   y.  Value index= 1, #Derivatives=0\n')
             exdata.writelines('   z.  Value index= 1, #Derivatives=0\n')
-            exdata.writelines(' 2) rgb, field, rectangular cartesian, real, #Components=3\n')
+            exdata.writelines(' 2) radius, field, rectangular cartesian, real, #Components=1\n')
+            exdata.writelines('   1.  Value index= 1, #Derivatives=0\n')
+            exdata.writelines(' 3) rgb, field, rectangular cartesian, real, #Components=3\n')
             exdata.writelines('   1.  Value index= 1, #Derivatives=0\n')
             exdata.writelines('   2.  Value index= 1, #Derivatives=0\n')
             exdata.writelines('   3.  Value index= 1, #Derivatives=0\n')
-            exdata.writelines(' 3) radius, field, rectangular cartesian, real, #Components=1\n')
-            exdata.writelines('   1.  Value index= 1, #Derivatives=0\n')
         else:
-            ValueError('Invalid number of fields.')
             ValueError('Invalid number of fields.')
 
     node_index = 1
