@@ -16,47 +16,49 @@ class ProgramArguments(object):
 def getNodeData(inputFile):
     """
     Extract values of nodes from ex file and store as list.
-    :param inputFile: ex file
+    :param inputFile: exnode file
     :return List of all values related to each node
     """
     node_index = 1
     allNodeData = []
+    originalNodeNumber = [0]
     nodeValues = []
     copyValue = False
 
     for index, line in enumerate(open(inputFile)):
-        node_pattern = "Node: %s" % node_index
-        if re.match(node_pattern, line):
-            allNodeData.append(nodeValues)
+        nodeLine = (line.split(' ')[0] == 'Node:')
+        if nodeLine:
+            node_index = line.split(' ')[1]
             nodeValues = []
             copyValue = True
-            node_index += 1
+            allNodeData.append(nodeValues)
+            originalNodeNumber.append(int(node_index))
             continue
 
         if copyValue == True:
             ln = line.split(' ')[2] if line.split(' ')[1] == '' else line.split(' ')[1]
             nodeValues.append(ln)
 
-        if re.match('!#mesh mesh1d, dimension=1, nodeset=nodes', line):
-            allNodeData.append(nodeValues)
-            break
+    allNodeData.append(nodeValues)
 
-    return allNodeData
+    return allNodeData, originalNodeNumber
 
 
 def getElementData(inputFile):
     """
     Extract nodes connectivity from ex file and store as list.
-    :param inputFile: ex file
+    :param inputFile: exelem file
     :return List of node connectivity for each element
-    :return element header copied from input file
     """
     elementList = []
     get_element_node = False
-    copyLines = False
+    copyLines = True
     elementHeader = []
 
     for index, line in enumerate(open(inputFile)):
+        elementLine = (line.split(' ')[1] == 'Element:')
+        if elementLine:
+            element_index = line.split(' ')[2]
         if get_element_node:
             node1 = int(float(line.split(' ')[1]))
             node2 = int(float(line.split(' ')[2]))
@@ -64,14 +66,8 @@ def getElementData(inputFile):
             get_element_node = False
         if re.match(" Nodes:", line):
             get_element_node = True
-        if re.match('!#mesh mesh1d, dimension=1, nodeset=nodes', line):
-            copyLines = True
-        if re.match('Element: 1', line):
-            copyLines = False
-        if copyLines:
-            elementHeader.append(line)
 
-    return elementList, elementHeader
+    return elementList
 
 
 def getNewNodeNumber(oldNodeNumber, newNodeNumberList, newNodeCount):
@@ -81,7 +77,7 @@ def getNewNodeNumber(oldNodeNumber, newNodeNumberList, newNodeCount):
     :param oldNodeNumber: original node numbering
     :param newNodeNumberList: List that stores new node numbering
     :param newNodeCount: Count track for new node index
-    : return: new node number, updated node number list and
+    :return new node number, updated node number list and
     updated new node count
     """
 
@@ -94,19 +90,61 @@ def getNewNodeNumber(oldNodeNumber, newNodeNumberList, newNodeCount):
 
     return newNodeNumber, newNodeNumberList, newNodeCount
 
+def writeNodesToFile(inputNodeFile, outputNodeFile, compressedNodeNumberList, oldNumberOfReducedNodes, nodeData, numberOfValues):
+    """
+    Copy file header from input file to output file. Write nodes
+    and values to output file.
+    :param inputNodeFile: Input exnode file
+    :param outputNodeFile: New exnode file with reduced nodes
+    :param compressedNodeNumberList: In stomach files, there are gaps
+    between node numberings. This list records the new node numbering
+    after removing the gaps
+    :param oldNumberOfReducedNodes: List of old node numbering for
+    retained nodes
+    :param nodeData: Node coordinates and values
+    :numberOfValues: Number of values for each node
+    """
 
-def downsample_ex(inputFile, outputFile, targetLength = 10):
+    # Copy file header from input file to output file
+    for index, line in enumerate(open(inputNodeFile)):
+        with open(outputNodeFile, 'a') as output:
+            if not re.match("Node: 1", line):
+                output.writelines(line)
+            else:
+                break
+
+    # Write nodes and values
+    for i in range(1, len(oldNumberOfReducedNodes)):
+        with open(outputNodeFile, 'a') as output:
+            output.writelines("Node: %s" % i + '\n')
+            for j in range(numberOfValues):
+                output.writelines(' ' + nodeData[compressedNodeNumberList[oldNumberOfReducedNodes[i]]-1][j])
+
+    return
+
+def downsample_ex(inputNode0File, inputNode1File, inputNode2File, inputElemFile, outputNode0File, outputNode1File, outputNode2File, outputElemFile, targetLength = 10):
 
     # Extract nodes and elements from ex file
-    nodeData = getNodeData(inputFile)
-    elementList, elementHeader = getElementData(inputFile)
-    totalNodes = len(nodeData)
+    node0Data, originalNodeNumberList = getNodeData(inputNode0File)
+    node1Data, _ = getNodeData(inputNode1File)
+    node2Data, _ = getNodeData(inputNode2File)
+    elementList = getElementData(inputElemFile)
+    totalNodes = len(node0Data)
+    totalOriginalNodes = max(originalNodeNumberList)
+
+    # Create compressedNodeNumber list
+    lastOriginalNode = max(originalNodeNumberList)
+    compressedNodeNumberList = [0] * (lastOriginalNode + 2)
+    for i in range(len(originalNodeNumberList)):
+        compressedNumber = i
+        originalNodeNumber = originalNodeNumberList[i]
+        compressedNodeNumberList[originalNodeNumber] = compressedNumber
 
     # Create parent-child list & child-parent list
     childList = [] # stores node numbering of children
     clearedChildList = [] # stores nodes that have been taken care of
     parentList = [] # stores node numbering of parents
-    for i in range(1,totalNodes+2):
+    for i in range(1,totalOriginalNodes+2):
         childList.append([0, 0, 0, 0]) # expecting 4 children and parents but might expand later
         parentList.append([0, 0, 0, 0])
         clearedChildList.append([0, 0, 0, 0])
@@ -127,9 +165,9 @@ def downsample_ex(inputFile, outputFile, targetLength = 10):
         parentList[childNode][i] = parentNode
 
     #Identify start nodes, end nodes and junctions
-    junctionCheck = [0] * (totalNodes+2)
-    startNodeCheck = [0] * (totalNodes+2)
-    endNodeCheck = [0] * (totalNodes+2)
+    junctionCheck = [0] * (totalOriginalNodes+2)
+    startNodeCheck = [0] * (totalOriginalNodes+2)
+    endNodeCheck = [0] * (totalOriginalNodes+2)
 
     for i in range(len(childList)):
         if childList[i][0] == 0:
@@ -142,7 +180,7 @@ def downsample_ex(inputFile, outputFile, targetLength = 10):
             junctionCheck[i] = 1
 
     # Find points in a branch
-    newNodeNumberList = [0] * (totalNodes+2)
+    newNodeNumberList = [0] * (totalOriginalNodes+2)
     reducedElementList = []
     newNodeCount = 0
 
@@ -162,8 +200,8 @@ def downsample_ex(inputFile, outputFile, targetLength = 10):
             else: # child is not the end of branch
                 nx = []
                 branchNodes = []
-                nx.append([float(nodeData[parentNode][c]) for c in range(3)])
-                nx.append([float(nodeData[childNode][c]) for c in range(3)])
+                nx.append([float(node0Data[compressedNodeNumberList[parentNode]-1][c]) for c in range(3)])
+                nx.append([float(node0Data[compressedNodeNumberList[childNode]-1][c]) for c in range(3)])
                 branchNodes.append(parentNode)
                 branchNodes.append(childNode)
                 count = 0
@@ -172,7 +210,7 @@ def downsample_ex(inputFile, outputFile, targetLength = 10):
                     assert count < 10000, 'Trapped in while loop' 
                     childNode = childList[childNode][0]
                     childAtEndOfBranch = (junctionCheck[childNode] == 1 or endNodeCheck[childNode] == 1 or childNode == parentNode)
-                    nx.append([float(nodeData[childNode][c]) for c in range(3)])
+                    nx.append([float(node0Data[compressedNodeNumberList[childNode]-1][c]) for c in range(3)])
                     branchNodes.append(childNode)
 
                 # Null nodes inside a branch
@@ -210,71 +248,63 @@ def downsample_ex(inputFile, outputFile, targetLength = 10):
                     childNewNodeNumber, newNodeNumberList, newNodeCount = getNewNodeNumber(childNode, newNodeNumberList, newNodeCount)
                     reducedElementList.append([parentNewNodeNumber, childNewNodeNumber])
 
-    print('Reduced number of nodes from', totalNodes-1, 'to', newNodeCount)
+    print('Reduced number of nodes from', totalOriginalNodes-1, 'to', newNodeCount)
 
     # Find old node numbering of retained nodes
     oldNumberOfReducedNodes = [0]*(newNodeCount+1)
     for i in range(len(newNodeNumberList)):
         if newNodeNumberList[i] > 0:
             oldNumberOfReducedNodes[newNodeNumberList[i]] = i
+    numberOfValues = len(node0Data[1])
 
-    # Write output file
-    numberOfValues = len(nodeData[1])
-    # Copy file header from input file to output file
-    for index, line in enumerate(open(inputFile)):
-        with open(outputFile, 'a') as output:
-            if not re.match("Node: 1", line):
+    # Write output exnode files
+    writeNodesToFile(inputNode0File, outputNode0File, compressedNodeNumberList, oldNumberOfReducedNodes, node0Data, numberOfValues)
+    writeNodesToFile(inputNode1File, outputNode1File, compressedNodeNumberList, oldNumberOfReducedNodes, node1Data, numberOfValues)
+    writeNodesToFile(inputNode2File, outputNode2File, compressedNodeNumberList, oldNumberOfReducedNodes, node2Data, numberOfValues)
+
+    ## Write elements to output exelem file
+    for index, line in enumerate(open(inputElemFile)):
+        with open(outputElemFile, 'a') as output:
+            if not re.match(" Element: 1 0 0", line):
                 output.writelines(line)
             else:
                 break
 
-    # Write nodes and values
-    for i in range(1, len(oldNumberOfReducedNodes)):
-        with open(outputFile, 'a') as output:
-            output.writelines("Node: %s" % i + '\n')
-            for j in range(numberOfValues):
-                output.writelines(' ' + nodeData[oldNumberOfReducedNodes[i]][j])
-
-    # Copy file element header from input file to output file
-    copyLines = False
-    for i in range(len(elementHeader)):
-        with open(outputFile, 'a') as output:
-            output.writelines(elementHeader[i])
-
-    # Write elements to output file
     for i in range(len(reducedElementList)):
-        with open(outputFile, 'a') as output:
-            output.writelines("Element: %s" % (i+1) + '\n')
+        with open(outputElemFile, 'a') as output:
+            output.writelines(" Element: %s 0 0" % (i+1) + '\n')
             output.writelines(" Nodes:" + '\n')
             output.writelines(" %s %s" % (reducedElementList[i][0], reducedElementList[i][1]) + '\n')
-
+            output.writelines(" Scale factors:" + '\n')
+            output.writelines("  1.000000000000000e+00  1.000000000000000e+00" + '\n')
 
 def main():
     args = parse_args()
-    if os.path.exists(args.inputFile):
+    if os.path.exists(args.inputNode0File):
 
-        if args.outputFile is None:
-            fileName = args.inputFile.split('.')[0]
-            outputFile = fileName + '_reducedTest.ex'
-        else:
-            outputFile = args.outputFile + '.ex'
+        nodeFileName = args.inputNode0File.split('.')[0]
+        outputNode0File = nodeFileName + 'reduced_0.exnode'
+        outputNode1File = nodeFileName + 'reduced_1.exnode'
+        outputNode2File = nodeFileName + 'reduced_2.exnode'
 
-        if os.path.exists(outputFile):
-            os.remove(outputFile)
+        elemFileName = args.inputElemFile.split('.')[0]
+        outputElemFile = elemFileName + '_reduced.exelem'
 
         if args.target_distance is None:
             target_distance = 10
         else:
-            target_distance = int(args.target_distance)
+            target_distance = float(args.target_distance)
 
-        downsample_ex(args.inputFile, outputFile, target_distance)
+        downsample_ex(args.inputNode0File, args.inputNode1File, args.inputNode2File, args.inputElemFile, outputNode0File, outputNode1File, outputNode2File, outputElemFile, target_distance)
 
+    return
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Downsampling of ex file.")
-    parser.add_argument("inputFile", help="Location of the input file.")
-    parser.add_argument("--outputFile", help="Location of the output downsampled file. "
-                                                "[defaults to the location of the input file if not set.]")
+    parser = argparse.ArgumentParser(description="Downsampling of exnode and exelem files.")
+    parser.add_argument("inputNode0File", help="Location of the input 0 exnode file.")
+    parser.add_argument("--inputNode1File", help="Location of the input 1 exnode file.")
+    parser.add_argument("--inputNode2File", help="Location of the input 2 exnode file.")
+    parser.add_argument("--inputElemFile", help="Location of the input exelem file.")
     parser.add_argument("--target_distance", help="Target distance between downsampled points. "
                                                       "[default is 10.]")
 

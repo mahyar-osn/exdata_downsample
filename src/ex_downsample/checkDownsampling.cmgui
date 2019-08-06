@@ -1,0 +1,11 @@
+gfx read node "C:\Users\mlin865\Desktop\kumar_reduced\ima_circular_ventral\test2.exnode" region original
+gfx read element test.exelem region original
+gfx read node test0reduced_2.exnode region reduced
+gfx read element test_reduced.exelem region reduced
+gfx cre win
+gfx edit sce
+gfx modify g_element "/" general clear;
+gfx modify g_element /original/ general clear;
+gfx modify g_element /original/ lines domain_mesh1d coordinate coordinates face all tessellation default LOCAL line line_base_size 0 select_on material default selected_material default_selected render_shaded;
+gfx modify g_element /reduced/ general clear;
+gfx modify g_element /reduced/ lines domain_mesh1d coordinate coordinates face all tessellation default LOCAL line line_base_size 0 select_on material cyan selected_material default_selected render_shaded;
